@@ -162,17 +162,29 @@ async function getProfilesByIds(profileIds) {
       throw createRepositoryError(`Failed to load profiles: ${error.message}`);
     }
 
-    return data;
+    return data.map((profile) => ({
+      ...profile,
+      enrollment_no: null,
+      division: null
+    }));
   }
 
   try {
     const pool = getPostgresPool();
     const result = await pool.query(
       `
-        select id, name, email, student_id
-        from attendance_profiles
-        where id = any($1::uuid[])
-        order by name asc
+        select
+          p.id,
+          p.name,
+          p.email,
+          p.student_id,
+          s.enrollment_no,
+          s.division
+        from attendance_profiles p
+        left join attendance_students s
+          on s.id = p.student_id
+        where p.id = any($1::uuid[])
+        order by p.name asc
       `,
       [profileIds]
     );
@@ -325,6 +337,7 @@ async function getFriendSummaries(ownerProfileId) {
       attendance: calculateAttendancePercentage(profileSubjects),
       subject_count: profileSubjects.length,
       linked_to_import: Boolean(profile.student_id),
+      enrollment_no: profile.enrollment_no || null,
       subjects: mapSubjectRows(profileSubjects)
     };
   });
@@ -342,6 +355,7 @@ async function getCurrentAttendanceSnapshot(profileId) {
         p.email,
         p.name,
         p.student_id,
+        s.name as student_name,
         s.enrollment_no,
         s.roll_no,
         s.division,
@@ -349,9 +363,9 @@ async function getCurrentAttendanceSnapshot(profileId) {
         s.latest_import_id,
         i.file_name as latest_import_file_name,
         i.week_label as latest_import_week_label,
-        i.report_date as latest_import_report_date,
-        i.start_date as latest_import_start_date,
-        i.end_date as latest_import_end_date,
+        i.report_date::text as latest_import_report_date,
+        i.start_date::text as latest_import_start_date,
+        i.end_date::text as latest_import_end_date,
         i.created_at as latest_import_created_at
       from attendance_profiles p
       left join attendance_students s on s.id = p.student_id
@@ -395,7 +409,7 @@ async function getCurrentAttendanceSnapshot(profileId) {
     ? (
         await pool.query(
           `
-            select subject_name, attendance_date, was_class_held, was_present, updated_at
+            select subject_name, attendance_date::text as attendance_date, was_class_held, was_present, updated_at
             from attendance_daily_logs
             where student_id = $1
             order by attendance_date desc, subject_name asc
@@ -404,6 +418,20 @@ async function getCurrentAttendanceSnapshot(profileId) {
           [profile.student_id]
         )
       ).rows
+    : [];
+
+  const submittedDailyDates = profile.student_id
+    ? (
+        await pool.query(
+          `
+            select distinct attendance_date::text as attendance_date
+            from attendance_daily_logs
+            where student_id = $1
+            order by attendance_date asc
+          `,
+          [profile.student_id]
+        )
+      ).rows.map((row) => row.attendance_date)
     : [];
 
   return {
@@ -417,6 +445,7 @@ async function getCurrentAttendanceSnapshot(profileId) {
     linked_student: profile.student_id
       ? {
           id: profile.student_id,
+          name: profile.student_name,
           enrollment_no: profile.enrollment_no,
           roll_no: profile.roll_no,
           division: profile.division,
@@ -435,7 +464,8 @@ async function getCurrentAttendanceSnapshot(profileId) {
         }
       : null,
     subjects: mapSubjectRows(subjects),
-    recent_daily_logs: recentLogs
+    recent_daily_logs: recentLogs,
+    submitted_daily_dates: submittedDailyDates
   };
 }
 
@@ -670,6 +700,64 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
   }
 }
 
+async function addFriendByEnrollment(ownerProfileId, enrollmentNo) {
+  assertPostgresConfigured();
+
+  const pool = getPostgresPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('begin');
+
+    const friendResult = await client.query(
+      `
+        select
+          p.id,
+          p.name,
+          p.email,
+          s.enrollment_no,
+          s.division
+        from attendance_profiles p
+        inner join attendance_students s
+          on s.id = p.student_id
+        where s.enrollment_no = $1
+      `,
+      [enrollmentNo]
+    );
+
+    const friendProfile = friendResult.rows[0];
+
+    if (!friendProfile) {
+      throw createRepositoryError(
+        'That enrollment number has not linked an app account yet.',
+        404
+      );
+    }
+
+    if (friendProfile.id === ownerProfileId) {
+      throw createRepositoryError('You cannot add yourself as a friend.', 400);
+    }
+
+    await client.query(
+      `
+        insert into friendships (owner_profile_id, friend_profile_id)
+        values ($1, $2), ($2, $1)
+        on conflict do nothing
+      `,
+      [ownerProfileId, friendProfile.id]
+    );
+
+    await client.query('commit');
+
+    return friendProfile;
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function applyDailyAttendance(profileId, attendanceDate, entries) {
   assertPostgresConfigured();
 
@@ -774,46 +862,34 @@ async function applyDailyAttendance(profileId, attendanceDate, entries) {
         [profile.student_id, entry.subject_name, nextAttended, nextTotal]
       );
 
-      if (!entry.was_class_held && !entry.was_present) {
-        await client.query(
-          `
-            delete from attendance_daily_logs
-            where student_id = $1
-              and attendance_date = $2
-              and subject_name = $3
-          `,
-          [profile.student_id, attendanceDate, entry.subject_name]
-        );
-      } else {
-        await client.query(
-          `
-            insert into attendance_daily_logs (
-              student_id,
-              subject_name,
-              attendance_date,
-              was_class_held,
-              was_present,
-              created_by_profile_id,
-              updated_at
-            )
-            values ($1, $2, $3, $4, $5, $6, now())
-            on conflict (student_id, subject_name, attendance_date)
-            do update set
-              was_class_held = excluded.was_class_held,
-              was_present = excluded.was_present,
-              created_by_profile_id = excluded.created_by_profile_id,
-              updated_at = now()
-          `,
-          [
-            profile.student_id,
-            entry.subject_name,
-            attendanceDate,
-            entry.was_class_held,
-            entry.was_present,
-            profileId
-          ]
-        );
-      }
+      await client.query(
+        `
+          insert into attendance_daily_logs (
+            student_id,
+            subject_name,
+            attendance_date,
+            was_class_held,
+            was_present,
+            created_by_profile_id,
+            updated_at
+          )
+          values ($1, $2, $3, $4, $5, $6, now())
+          on conflict (student_id, subject_name, attendance_date)
+          do update set
+            was_class_held = excluded.was_class_held,
+            was_present = excluded.was_present,
+            created_by_profile_id = excluded.created_by_profile_id,
+            updated_at = now()
+        `,
+        [
+          profile.student_id,
+          entry.subject_name,
+          attendanceDate,
+          entry.was_class_held,
+          entry.was_present,
+          profileId
+        ]
+      );
     }
 
     await client.query('commit');
@@ -828,6 +904,7 @@ async function applyDailyAttendance(profileId, attendanceDate, entries) {
 }
 
 module.exports = {
+  addFriendByEnrollment,
   applyDailyAttendance,
   ensureProfile,
   getAllowedProfileIds,

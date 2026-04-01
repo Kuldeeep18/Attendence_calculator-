@@ -48,8 +48,12 @@ You still need to replace `[YOUR-PASSWORD]` with the real database password in `
 Optional but recommended:
 
 - `ADMIN_EMAILS=admin1@campus.edu,admin2@campus.edu`
+- `ACADEMIC_CALENDAR_PATH=SEM-4_Academic Calendar 2026_SY_CE.pdf`
+- `TIMETABLE_PDF_PATH=Class_Timetable_SY2_SEM-4_TT_2026.pdf`
 
 Only these emails can upload the weekly PDFs in production. If `ADMIN_EMAILS` is empty, weekly import stays available only in non-production mode.
+If `ACADEMIC_CALENDAR_PATH` is omitted, the backend looks for a PDF with "Academic Calendar" in the project root.
+If `TIMETABLE_PDF_PATH` is omitted, the backend looks for a PDF with "Timetable" in the project root.
 
 ## Run Locally
 
@@ -77,6 +81,12 @@ Run the shared planner tests:
 npm test
 ```
 
+Install the timetable parser helper once on the machine that runs the backend:
+
+```bash
+python -m pip install --user -r server/requirements-timetable.txt
+```
+
 ## Supabase Schema
 
 Apply the SQL in `server/supabase/schema.sql` to your Supabase project.
@@ -96,12 +106,17 @@ The schema now covers:
 2. Start the backend and frontend.
 3. Sign in as an admin account listed in `ADMIN_EMAILS`.
 4. Upload the weekly college PDFs from the Attendance Sync panel.
-5. Each student signs in and links their own enrollment number from the same weekly PDF.
-6. Students use the Daily Update panel to mark which subjects were held and which ones they attended until the next weekly PDF arrives.
-7. The planner uses the latest imported totals plus those daily updates.
+5. Each student signs up with name, email, password, and enrollment number.
+6. The app links the student to the imported weekly attendance record and uses the academic calendar PDF to find pending attendance dates after the latest weekly upload date.
+7. Students use the Daily Update panel to mark which subjects were held and which ones they attended on those pending dates.
+8. Friends can be added inside the planner by enrollment number, once the friend has signed up and linked their own enrollment.
+9. The planner uses the latest imported totals plus those daily updates.
+10. The group bunk planner now combines the timetable PDF with the academic calendar to recommend the next shared lecture to bunk, the best attendance-safe slot, and the before-vs-after attendance impact for each selected student.
 
 ## Notes
 
 - In non-production mode, the backend supports a development auth fallback when Firebase credentials are not configured yet.
 - The backend always includes the current signed-in user when calculating the group bunk plan, even if the user only selects friends in the UI.
 - The PDF parser is currently tuned for the weekly Semester IV attendance format shown in the sample PDFs in the repo, with subject order: `PYTHON-2`, `COA`, `FSD-2`, `DM`, `TOC`.
+- The academic calendar parser is currently tuned for the `SEM-4_Academic Calendar 2026_SY_CE.pdf` layout in this repo and only marks `Regular Teaching` entries as attendance-worthy days. Tests, holidays, reading holidays, and breaks do not create daily attendance prompts.
+- The timetable parser is currently tuned for the `Class_Timetable_SY2_SEM-4_TT_2026.pdf` layout in this repo and normalizes timetable aliases like `FCSP2` and `FSCP2` to `PYTHON-2`, and `FSD2` to `FSD-2`.

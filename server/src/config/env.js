@@ -18,7 +18,9 @@ const env = {
   ALLOW_DEV_AUTH_BYPASS: process.env.ALLOW_DEV_AUTH_BYPASS || 'true',
   FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
   FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
-  ADMIN_EMAILS: process.env.ADMIN_EMAILS || ''
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS || '',
+  ACADEMIC_CALENDAR_PATH: process.env.ACADEMIC_CALENDAR_PATH || '',
+  TIMETABLE_PDF_PATH: process.env.TIMETABLE_PDF_PATH || ''
 };
 
 function hasSupabaseCredentials() {

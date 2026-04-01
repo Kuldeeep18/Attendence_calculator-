@@ -30,6 +30,7 @@ app.get('/', (request, response) => {
       '/api/attendance/daily-update',
       '/api/attendance/import-weekly',
       '/api/friends',
+      '/api/friends/by-enrollment',
       '/api/planner/group-bunk'
     ]
   });

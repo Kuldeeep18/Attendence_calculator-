@@ -8,10 +8,16 @@ async function getAuthHeaders(user) {
     };
   }
 
+  const fallbackEmail = user?.email || 'demo@student.local';
+  const fallbackName =
+    user?.displayName ||
+    user?.name ||
+    (fallbackEmail.includes('@') ? fallbackEmail.split('@')[0] : 'Local Demo User');
+
   return {
-    'x-dev-user-id': 'local-demo-user',
-    'x-dev-user-email': 'demo@student.local',
-    'x-dev-user-name': 'Local Demo User'
+    'x-dev-user-id': user?.uid || 'local-demo-user',
+    'x-dev-user-email': fallbackEmail,
+    'x-dev-user-name': fallbackName
   };
 }
 
@@ -40,6 +46,17 @@ async function request(path, options = {}, user) {
 
 export function fetchSelectableFriends(user) {
   return request('/api/friends', { method: 'GET' }, user);
+}
+
+export function addFriendByEnrollment(enrollmentNo, user) {
+  return request(
+    '/api/friends/by-enrollment',
+    {
+      method: 'POST',
+      body: JSON.stringify({ enrollmentNo })
+    },
+    user
+  );
 }
 
 export function fetchPlannerResult(payload, user) {

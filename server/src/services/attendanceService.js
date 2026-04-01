@@ -3,6 +3,10 @@
 const { env, getAdminEmails } = require('../config/env');
 const attendanceRepository = require('./attendanceRepository');
 const {
+  getPendingAcademicDates,
+  toLocalIsoDate
+} = require('./academicCalendarService');
+const {
   DEFAULT_SUBJECT_ORDER,
   parseWeeklyAttendancePdf
 } = require('./weeklyAttendanceParser');
@@ -96,7 +100,7 @@ function normalizeDailyEntries(entries, allowedSubjectNames) {
   return normalizedEntries;
 }
 
-function buildDashboardResponse(snapshot, authUser) {
+async function buildDashboardResponse(snapshot, authUser) {
   const availableSubjects = snapshot.subjects.length
     ? snapshot.subjects.map((subject) => subject.subject_name)
     : [...DEFAULT_SUBJECT_ORDER];
@@ -108,6 +112,23 @@ function buildDashboardResponse(snapshot, authUser) {
     },
     { attended: 0, total: 0 }
   );
+  const currentDate = toLocalIsoDate(new Date());
+  const lastWeeklyUploadDate =
+    snapshot.linked_student?.latest_import?.report_date || null;
+  let calendarStatus = { calendar: null, pending_dates: [] };
+  let academicCalendarError = null;
+
+  if (lastWeeklyUploadDate) {
+    try {
+      calendarStatus = await getPendingAcademicDates({
+        fromDate: lastWeeklyUploadDate,
+        toDate: currentDate,
+        submittedDates: snapshot.submitted_daily_dates || []
+      });
+    } catch (error) {
+      academicCalendarError = error.message;
+    }
+  }
 
   return {
     ...snapshot,
@@ -115,7 +136,12 @@ function buildDashboardResponse(snapshot, authUser) {
       ? `${((totals.attended / totals.total) * 100).toFixed(2)}%`
       : null,
     available_subjects: availableSubjects,
-    can_import_weekly: canImportWeeklyAttendance(authUser)
+    can_import_weekly: canImportWeeklyAttendance(authUser),
+    current_date: currentDate,
+    last_weekly_upload_date: lastWeeklyUploadDate,
+    academic_calendar: calendarStatus.calendar,
+    academic_calendar_error: academicCalendarError,
+    pending_attendance_dates: calendarStatus.pending_dates
   };
 }
 
@@ -181,6 +207,41 @@ async function importWeeklyAttendance(authUser, files) {
   };
 }
 
+async function assertPendingDailyAttendanceDate(snapshot, attendanceDate) {
+  const lastWeeklyUploadDate =
+    snapshot.linked_student?.latest_import?.report_date || null;
+
+  if (!lastWeeklyUploadDate) {
+    throw createServiceError(
+      'Import a weekly attendance PDF and link your enrollment before saving daily attendance.',
+      400
+    );
+  }
+
+  let calendarStatus;
+
+  try {
+    calendarStatus = await getPendingAcademicDates({
+      fromDate: lastWeeklyUploadDate,
+      toDate: toLocalIsoDate(new Date()),
+      submittedDates: snapshot.submitted_daily_dates || []
+    });
+  } catch (error) {
+    throw createServiceError(error.message, error.status || 400);
+  }
+
+  const pendingDateSet = new Set(
+    calendarStatus.pending_dates.map((pendingDate) => pendingDate.date)
+  );
+
+  if (!pendingDateSet.has(attendanceDate)) {
+    throw createServiceError(
+      'Daily attendance can only be submitted for pending regular teaching dates after the latest weekly upload.',
+      400
+    );
+  }
+}
+
 async function submitDailyAttendance(authUser, payload = {}) {
   const currentProfile = await attendanceRepository.ensureProfile(authUser);
   const snapshot = await attendanceRepository.getCurrentAttendanceSnapshot(currentProfile.id);
@@ -191,6 +252,7 @@ async function submitDailyAttendance(authUser, payload = {}) {
       ? snapshot.subjects.map((subject) => subject.subject_name)
       : DEFAULT_SUBJECT_ORDER
   );
+  await assertPendingDailyAttendanceDate(snapshot, attendanceDate);
 
   const updatedSnapshot = await attendanceRepository.applyDailyAttendance(
     currentProfile.id,

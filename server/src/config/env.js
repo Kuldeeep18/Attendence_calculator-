@@ -17,7 +17,8 @@ const env = {
   FIREBASE_SERVICE_ACCOUNT_PATH: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
   ALLOW_DEV_AUTH_BYPASS: process.env.ALLOW_DEV_AUTH_BYPASS || 'true',
   FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || ''
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS || ''
 };
 
 function hasSupabaseCredentials() {
@@ -44,9 +45,16 @@ function getFirebasePrivateKey() {
   return env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
 }
 
+function getAdminEmails() {
+  return env.ADMIN_EMAILS.split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 module.exports = {
   env,
   hasDatabaseUrl,
+  getAdminEmails,
   getFirebasePrivateKey,
   hasFirebaseCredentials,
   hasFirebaseServiceAccountPath,

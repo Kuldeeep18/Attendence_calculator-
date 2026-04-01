@@ -233,13 +233,15 @@ input {
 }
 
 .auth-form,
-.planner-form {
+.planner-form,
+.stack-form {
   display: grid;
   gap: 16px;
 }
 
 .auth-form label,
-.inline-field {
+.inline-field,
+.stack-form label {
   display: grid;
   gap: 8px;
   color: var(--ink-body);
@@ -247,7 +249,8 @@ input {
 }
 
 .auth-form input,
-.inline-field input {
+.inline-field input,
+.stack-form input:not([type='checkbox']) {
   width: 100%;
   border: 1px solid rgba(15, 23, 32, 0.1);
   border-radius: 16px;
@@ -257,9 +260,14 @@ input {
 }
 
 .auth-form input:focus,
-.inline-field input:focus {
+.inline-field input:focus,
+.stack-form input:not([type='checkbox']):focus {
   outline: 2px solid rgba(15, 118, 110, 0.18);
   border-color: rgba(15, 118, 110, 0.26);
+}
+
+.stack-form input[type='file'] {
+  padding: 12px;
 }
 
 .mode-toggle {
@@ -322,9 +330,49 @@ input {
 
 .friend-selector,
 .subject-list,
-.user-grid {
+.user-grid,
+.sync-grid,
+.status-grid,
+.subject-check-grid,
+.file-list {
   display: grid;
   gap: 12px;
+}
+
+.sync-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.stack-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.muted-copy {
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.file-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.file-pill {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(15, 23, 32, 0.05);
+  color: var(--ink-body);
+  font-weight: 700;
+}
+
+.status-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-top: 18px;
+}
+
+.mini-card.compact strong {
+  font-size: 1.4rem;
 }
 
 .selector-header {
@@ -372,11 +420,42 @@ input {
 }
 
 .results-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .user-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.subject-check-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.subject-check-card {
+  border: 1px solid rgba(15, 23, 32, 0.08);
+  background: var(--surface-strong);
+  border-radius: 22px;
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.subject-check-card strong {
+  font-size: 1rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-body);
+  font-weight: 600;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
 }
 
 .user-card span {
@@ -416,7 +495,10 @@ input {
 
   .feature-strip,
   .results-grid,
-  .user-grid {
+  .user-grid,
+  .sync-grid,
+  .status-grid,
+  .subject-check-grid {
     grid-template-columns: 1fr;
   }
 

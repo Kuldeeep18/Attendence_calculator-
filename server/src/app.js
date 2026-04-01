@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 
+const attendanceRoutes = require('./routes/attendanceRoutes');
 const { env } = require('./config/env');
 const friendRoutes = require('./routes/friendRoutes');
 const healthRoutes = require('./routes/healthRoutes');
@@ -22,11 +23,20 @@ app.get('/', (request, response) => {
   response.json({
     name: 'Smart Attendance Manager API',
     version: '1.0.0',
-    endpoints: ['/api/health', '/api/friends', '/api/planner/group-bunk']
+    endpoints: [
+      '/api/health',
+      '/api/attendance/me',
+      '/api/attendance/link-student',
+      '/api/attendance/daily-update',
+      '/api/attendance/import-weekly',
+      '/api/friends',
+      '/api/planner/group-bunk'
+    ]
   });
 });
 
 app.use('/api/health', healthRoutes);
+app.use('/api/attendance', attendanceRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/planner', plannerRoutes);
 

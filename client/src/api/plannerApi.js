@@ -17,11 +17,14 @@ async function getAuthHeaders(user) {
 
 async function request(path, options = {}, user) {
   const authHeaders = await getAuthHeaders(user);
+  const isFormData =
+    typeof FormData !== 'undefined' && options.body instanceof FormData;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
       ...authHeaders,
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(options.headers || {})
     }
   });
@@ -45,6 +48,49 @@ export function fetchPlannerResult(payload, user) {
     {
       method: 'POST',
       body: JSON.stringify(payload)
+    },
+    user
+  );
+}
+
+export function fetchAttendanceDashboard(user) {
+  return request('/api/attendance/me', { method: 'GET' }, user);
+}
+
+export function linkStudentProfile(enrollmentNo, user) {
+  return request(
+    '/api/attendance/link-student',
+    {
+      method: 'POST',
+      body: JSON.stringify({ enrollmentNo })
+    },
+    user
+  );
+}
+
+export function submitDailyAttendance(payload, user) {
+  return request(
+    '/api/attendance/daily-update',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    },
+    user
+  );
+}
+
+export function importWeeklyAttendance(files, user) {
+  const formData = new FormData();
+
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  return request(
+    '/api/attendance/import-weekly',
+    {
+      method: 'POST',
+      body: formData
     },
     user
   );

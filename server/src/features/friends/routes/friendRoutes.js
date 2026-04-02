@@ -2,11 +2,11 @@
 
 const express = require('express');
 
-const { authenticateRequest } = require('../middleware/authenticateRequest');
+const { authenticateRequest } = require('../../../middleware/authenticateRequest');
 const {
   addFriendByEnrollment,
   listSelectableFriends
-} = require('../services/plannerService');
+} = require('../services/friendService');
 
 const router = express.Router();
 

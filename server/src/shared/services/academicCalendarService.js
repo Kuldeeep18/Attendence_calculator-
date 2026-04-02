@@ -5,9 +5,9 @@ const path = require('node:path');
 
 const { PDFParse } = require('pdf-parse');
 
-const { env } = require('../config/env');
+const { env } = require('../../config/env');
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
 const ROW_START_PATTERN = /^(Sun|Mon|Tues|Wed|Thu|Fri|Sat)\b/;
 const MONTH_SEQUENCE = [
   { label: 'March-26', year: 2026, month: 3 },

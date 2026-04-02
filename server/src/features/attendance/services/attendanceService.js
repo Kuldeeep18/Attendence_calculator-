@@ -1,11 +1,11 @@
 'use strict';
 
-const { env, getAdminEmails } = require('../config/env');
-const attendanceRepository = require('./attendanceRepository');
+const { env, getAdminEmails } = require('../../../config/env');
+const attendanceRepository = require('../../../shared/services/attendanceRepository');
 const {
   getPendingAcademicDates,
   toLocalIsoDate
-} = require('./academicCalendarService');
+} = require('../../../shared/services/academicCalendarService');
 const {
   DEFAULT_SUBJECT_ORDER,
   parseWeeklyAttendancePdf

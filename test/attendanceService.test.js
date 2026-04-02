@@ -3,9 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const servicePath = require.resolve('../server/src/services/attendanceService');
-const repositoryPath = require.resolve('../server/src/services/attendanceRepository');
-const calendarPath = require.resolve('../server/src/services/academicCalendarService');
+const servicePath = require.resolve('../server/src/features/attendance/services/attendanceService');
+const repositoryPath = require.resolve('../server/src/shared/services/attendanceRepository');
+const calendarPath = require.resolve('../server/src/shared/services/academicCalendarService');
 
 function loadAttendanceService({ repositoryMock, calendarMock }) {
   const originalService = require.cache[servicePath];

@@ -278,6 +278,7 @@ function buildSmartGroupBunkPlan(users, bunkCount = 1) {
       const attendanceRatio = calculateAttendanceRatio(totalAttended, totalClasses);
 
       return {
+        id: user.id,
         name: user.name,
         attendance: formatPercentage(attendanceRatio),
         safe_bunks: calculateSafeBunks(totalAttended, totalClasses)

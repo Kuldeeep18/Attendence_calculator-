@@ -91,6 +91,7 @@ test('buildSmartGroupBunkPlan returns the required JSON output shape', () => {
   assert.equal(result.users.length, 2);
   assert.equal(result.recommended_subjects.length, 2);
   assert.deepEqual(result.users[0], {
+    id: 1,
     name: 'Ava',
     attendance: '85.00%',
     safe_bunks: 8

@@ -26,7 +26,23 @@ This repo now includes a production-ready Smart Group Bunk Planner with a real a
 ```text
 .
 |-- client/
+|   `-- src/
+|       |-- api/
+|       `-- features/
+|           |-- auth/
+|           `-- dashboard/
+|               |-- pages/
+|               |-- sections/
+|               `-- DashboardScreen.jsx
 |-- server/
+|   `-- src/
+|       |-- features/
+|       |   |-- attendance/
+|       |   |-- friends/
+|       |   |-- planner/
+|       |   `-- health/
+|       `-- shared/
+|           `-- services/
 |-- src/
 `-- test/
 ```

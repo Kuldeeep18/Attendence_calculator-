@@ -1,7 +1,10 @@
 'use strict';
 
-const { MIN_ATTENDANCE_RATIO } = require('../../../src');
-const { loadAcademicCalendar, toLocalIsoDate } = require('./academicCalendarService');
+const { MIN_ATTENDANCE_RATIO } = require('../../../../../src');
+const {
+  loadAcademicCalendar,
+  toLocalIsoDate
+} = require('../../../shared/services/academicCalendarService');
 const { loadTimetable, normalizeSubjectName } = require('./timetableService');
 
 const WEEKDAY_KEYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];

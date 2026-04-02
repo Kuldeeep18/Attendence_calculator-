@@ -8,7 +8,7 @@ const path = require('node:path');
 const {
   DEFAULT_SUBJECT_ORDER,
   parseWeeklyAttendancePdf
-} = require('../server/src/services/weeklyAttendanceParser');
+} = require('../server/src/features/attendance/services/weeklyAttendanceParser');
 
 test('parses the B1-B4 weekly attendance PDF', async () => {
   const filePath = path.resolve(

@@ -1,8 +1,8 @@
 'use strict';
 
-const { assertSupabaseConfigured, getSupabaseAdminClient } = require('../lib/supabase');
-const { getPostgresPool, isPostgresConfigured } = require('../lib/postgres');
-const { hasSupabaseCredentials } = require('../config/env');
+const { assertSupabaseConfigured, getSupabaseAdminClient } = require('../../lib/supabase');
+const { getPostgresPool, isPostgresConfigured } = require('../../lib/postgres');
+const { hasSupabaseCredentials } = require('../../config/env');
 
 function createRepositoryError(message, status = 500) {
   const error = new Error(message);

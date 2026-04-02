@@ -8,7 +8,7 @@ const path = require('node:path');
 const {
   getPendingAcademicDates,
   parseAcademicCalendarPdf
-} = require('../server/src/services/academicCalendarService');
+} = require('../server/src/shared/services/academicCalendarService');
 
 test('parses the academic calendar PDF into dated events', async () => {
   const filePath = path.resolve(

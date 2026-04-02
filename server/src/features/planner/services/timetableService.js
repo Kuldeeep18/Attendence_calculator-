@@ -5,10 +5,10 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 
-const { env } = require('../config/env');
+const { env } = require('../../../config/env');
 
 const execFileAsync = promisify(execFile);
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const PYTHON_COMMAND = process.platform === 'win32' ? 'python' : 'python3';
 const SUBJECT_NAME_MAP = {
   FCSP2: 'PYTHON-2',

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   buildSharedBunkRecommendations
-} = require('../server/src/services/groupBunkScheduleService');
+} = require('../server/src/features/planner/services/groupBunkScheduleService');
 
 test('buildSharedBunkRecommendations returns the next safe lecture and the best scored lecture', () => {
   const participants = [

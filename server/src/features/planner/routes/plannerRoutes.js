@@ -2,7 +2,7 @@
 
 const express = require('express');
 
-const { authenticateRequest } = require('../middleware/authenticateRequest');
+const { authenticateRequest } = require('../../../middleware/authenticateRequest');
 const { buildPlannerResult } = require('../services/plannerService');
 
 const router = express.Router();

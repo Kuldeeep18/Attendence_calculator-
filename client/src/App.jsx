@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -16,8 +17,8 @@ import {
   linkStudentProfile,
   submitDailyAttendance
 } from './api/plannerApi';
-import AuthScreen from './components/AuthScreen';
-import DashboardScreen from './components/DashboardScreen';
+import AuthScreen from './features/auth/AuthScreen';
+import DashboardScreen from './features/dashboard/DashboardScreen';
 import { auth, firebaseEnabled } from './firebase';
 import {
   createLocalUser,
@@ -473,73 +474,89 @@ function App() {
 
   if (!viewer) {
     return (
-      <AuthScreen
-        authBusy={authBusy}
-        authMode={authMode}
-        credentials={credentials}
-        errorMessage={errorMessage}
-        firebaseEnabled={firebaseEnabled}
-        onCredentialsChange={(field, value) =>
-          setCredentials((previous) => ({ ...previous, [field]: value }))
-        }
-        onModeChange={setAuthMode}
-        onSubmit={handleAuthSubmit}
-      />
+      <Routes>
+        <Route
+          path="/auth"
+          element={
+            <AuthScreen
+              authBusy={authBusy}
+              authMode={authMode}
+              credentials={credentials}
+              errorMessage={errorMessage}
+              firebaseEnabled={firebaseEnabled}
+              onCredentialsChange={(field, value) =>
+                setCredentials((previous) => ({ ...previous, [field]: value }))
+              }
+              onModeChange={setAuthMode}
+              onSubmit={handleAuthSubmit}
+            />
+          }
+        />
+        <Route path="*" element={<Navigate replace to="/auth" />} />
+      </Routes>
     );
   }
 
   return (
-    <DashboardScreen
-      attendanceData={attendanceData}
-      attendanceLoadingLabel={
-        loadingAttendance || loadingFriends ? 'Refreshing workspace...' : null
-      }
-      bunkCount={bunkCount}
-      bunkTimingPreference={bunkTimingPreference}
-      multiBunkPreference={multiBunkPreference}
-      currentViewerName={currentViewerName}
-      dailyAttendanceDate={dailyAttendanceDate}
-      dailyBusy={dailyBusy}
-      dailyEntries={dailyEntries}
-      errorMessage={errorMessage}
-      friendBusy={friendBusy}
-      friendEnrollmentNo={friendEnrollmentNo}
-      friendsData={friendsData}
-      formatDateLabel={formatDateLabel}
-      importBusy={importBusy}
-      importSummary={importSummary}
-      linkBusy={linkBusy}
-      linkedStudent={attendanceData.linked_student}
-      loadingFriends={loadingFriends}
-      onAddFriend={handleAddFriend}
-      onDailyEntryChange={handleDailyEntryChange}
-      onDailySubmit={handleDailySubmit}
-      onFriendEnrollmentChange={setFriendEnrollmentNo}
-      onLinkEnrollmentChange={setProfileEnrollmentNo}
-      onLinkStudent={handleLinkStudent}
-      onPlannerSubmit={handlePlannerSubmit}
-      onSelectPendingDate={setDailyAttendanceDate}
-      onSignOut={handleSignOut}
-      onToggleFriend={(friendId) =>
-        setSelectedUserIds((previous) =>
-          previous.includes(friendId)
-            ? previous.filter((currentId) => currentId !== friendId)
-            : [...previous, friendId]
-        )
-      }
-      onWeeklyFilesChange={(event) => setWeeklyFiles(Array.from(event.target.files || []))}
-      onWeeklyImport={handleWeeklyImport}
-      plannerResult={plannerResult}
-      profileEnrollmentNo={profileEnrollmentNo}
-      selectedUserIds={selectedUserIds}
-      setBunkCount={setBunkCount}
-      setBunkTimingPreference={setBunkTimingPreference}
-      setMultiBunkPreference={setMultiBunkPreference}
-      statusMessage={statusMessage}
-      submitBusy={submitBusy}
-      viewer={viewer}
-      weeklyFiles={weeklyFiles}
-    />
+    <Routes>
+      <Route
+        path="/dashboard/*"
+        element={
+          <DashboardScreen
+            attendanceData={attendanceData}
+            attendanceLoadingLabel={
+              loadingAttendance || loadingFriends ? 'Refreshing workspace...' : null
+            }
+            bunkCount={bunkCount}
+            bunkTimingPreference={bunkTimingPreference}
+            multiBunkPreference={multiBunkPreference}
+            currentViewerName={currentViewerName}
+            dailyAttendanceDate={dailyAttendanceDate}
+            dailyBusy={dailyBusy}
+            dailyEntries={dailyEntries}
+            errorMessage={errorMessage}
+            friendBusy={friendBusy}
+            friendEnrollmentNo={friendEnrollmentNo}
+            friendsData={friendsData}
+            formatDateLabel={formatDateLabel}
+            importBusy={importBusy}
+            importSummary={importSummary}
+            linkBusy={linkBusy}
+            linkedStudent={attendanceData.linked_student}
+            loadingFriends={loadingFriends}
+            onAddFriend={handleAddFriend}
+            onDailyEntryChange={handleDailyEntryChange}
+            onDailySubmit={handleDailySubmit}
+            onFriendEnrollmentChange={setFriendEnrollmentNo}
+            onLinkEnrollmentChange={setProfileEnrollmentNo}
+            onLinkStudent={handleLinkStudent}
+            onPlannerSubmit={handlePlannerSubmit}
+            onSelectPendingDate={setDailyAttendanceDate}
+            onSignOut={handleSignOut}
+            onToggleFriend={(friendId) =>
+              setSelectedUserIds((previous) =>
+                previous.includes(friendId)
+                  ? previous.filter((currentId) => currentId !== friendId)
+                  : [...previous, friendId]
+              )
+            }
+            onWeeklyFilesChange={(event) => setWeeklyFiles(Array.from(event.target.files || []))}
+            onWeeklyImport={handleWeeklyImport}
+            plannerResult={plannerResult}
+            profileEnrollmentNo={profileEnrollmentNo}
+            selectedUserIds={selectedUserIds}
+            setBunkCount={setBunkCount}
+            setBunkTimingPreference={setBunkTimingPreference}
+            setMultiBunkPreference={setMultiBunkPreference}
+            statusMessage={statusMessage}
+            submitBusy={submitBusy}
+            viewer={viewer}
+            weeklyFiles={weeklyFiles}
+          />
+        }
+      />
+      <Route path="*" element={<Navigate replace to="/dashboard/overview" />} />
+    </Routes>
   );
 }
 

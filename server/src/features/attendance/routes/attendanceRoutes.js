@@ -3,7 +3,7 @@
 const express = require('express');
 const multer = require('multer');
 
-const { authenticateRequest } = require('../middleware/authenticateRequest');
+const { authenticateRequest } = require('../../../middleware/authenticateRequest');
 const {
   getAttendanceDashboard,
   importWeeklyAttendance,

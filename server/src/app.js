@@ -3,11 +3,11 @@
 const express = require('express');
 const cors = require('cors');
 
-const attendanceRoutes = require('./routes/attendanceRoutes');
 const { env } = require('./config/env');
-const friendRoutes = require('./routes/friendRoutes');
-const healthRoutes = require('./routes/healthRoutes');
-const plannerRoutes = require('./routes/plannerRoutes');
+const { router: attendanceRoutes } = require('./features/attendance');
+const { router: friendRoutes } = require('./features/friends');
+const { router: healthRoutes } = require('./features/health');
+const { router: plannerRoutes } = require('./features/planner');
 
 const app = express();
 

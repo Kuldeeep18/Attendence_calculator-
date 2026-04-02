@@ -1,8 +1,8 @@
 'use strict';
 
-const { buildSmartGroupBunkPlan } = require('../../../src');
+const { buildSmartGroupBunkPlan } = require('../../../../../src');
 
-const attendanceRepository = require('./attendanceRepository');
+const attendanceRepository = require('../../../shared/services/attendanceRepository');
 const { loadSharedBunkRecommendations } = require('./groupBunkScheduleService');
 
 const BUNK_TIMING_PREFERENCE = {
@@ -135,52 +135,25 @@ function normalizeMultiBunkPreference(multiBunkPreference, bunkCount) {
   return mappedValue;
 }
 
-function normalizeEnrollmentNo(enrollmentNo) {
-  const normalized = String(enrollmentNo || '').trim();
+function buildUserTimetableProjections(recommendedSlots = []) {
+  const projectionsByUserId = new Map();
 
-  if (!/^\d{12,14}$/.test(normalized)) {
-    throw createServiceError(
-      'Enter the enrollment number exactly as it appears in the weekly PDF.',
-      400
-    );
-  }
+  recommendedSlots.forEach((slot) => {
+    (slot.participants || []).forEach((participant) => {
+      const current = projectionsByUserId.get(participant.user_id) || [];
+      current.push({
+        date: slot.date,
+        lecture_no: slot.lecture_no,
+        title: slot.title,
+        subject_name: participant.subject_name,
+        before_attendance: participant.before_attendance,
+        after_attendance: participant.after_attendance
+      });
+      projectionsByUserId.set(participant.user_id, current);
+    });
+  });
 
-  return normalized;
-}
-
-async function listSelectableFriends(authUser) {
-  const currentProfile = await attendanceRepository.ensureProfile(authUser);
-  const friends = await attendanceRepository.getFriendSummaries(currentProfile.id);
-
-  return {
-    current_user: {
-      id: currentProfile.id,
-      name: currentProfile.name,
-      email: currentProfile.email
-    },
-    friends
-  };
-}
-
-async function addFriendByEnrollment(authUser, payload = {}) {
-  const currentProfile = await attendanceRepository.ensureProfile(authUser);
-  const enrollmentNo = normalizeEnrollmentNo(payload.enrollmentNo);
-
-  const addedFriend = await attendanceRepository.addFriendByEnrollment(
-    currentProfile.id,
-    enrollmentNo
-  );
-  const friends = await attendanceRepository.getFriendSummaries(currentProfile.id);
-
-  return {
-    current_user: {
-      id: currentProfile.id,
-      name: currentProfile.name,
-      email: currentProfile.email
-    },
-    added_friend: addedFriend,
-    friends
-  };
+  return projectionsByUserId;
 }
 
 async function buildPlannerResult(authUser, payload = {}) {
@@ -254,14 +227,21 @@ async function buildPlannerResult(authUser, payload = {}) {
     scheduleRecommendations.schedule_recommendation_error = error.message;
   }
 
+  const userTimetableProjections = buildUserTimetableProjections(
+    scheduleRecommendations.recommended_slots
+  );
+  const usersWithTimetableProjections = plannerResult.users.map((user) => ({
+    ...user,
+    timetable_subjects_before_after: userTimetableProjections.get(user.id) || []
+  }));
+
   return {
     ...plannerResult,
+    users: usersWithTimetableProjections,
     ...scheduleRecommendations
   };
 }
 
 module.exports = {
-  addFriendByEnrollment,
-  buildPlannerResult,
-  listSelectableFriends
+  buildPlannerResult
 };

@@ -2,10 +2,10 @@
 
 const express = require('express');
 
-const { env } = require('../config/env');
-const { isFirebaseConfigured } = require('../lib/firebaseAdmin');
-const { isPostgresConfigured } = require('../lib/postgres');
-const { isSupabaseConfigured } = require('../lib/supabase');
+const { env } = require('../../../config/env');
+const { isFirebaseConfigured } = require('../../../lib/firebaseAdmin');
+const { isPostgresConfigured } = require('../../../lib/postgres');
+const { isSupabaseConfigured } = require('../../../lib/supabase');
 
 const router = express.Router();
 

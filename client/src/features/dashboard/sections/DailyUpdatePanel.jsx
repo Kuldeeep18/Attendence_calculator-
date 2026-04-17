@@ -13,6 +13,14 @@ function DailyUpdatePanel({
   dailyBusy,
   viewer
 }) {
+  const calendarStatusText = attendanceData.academic_calendar?.file_name
+    ? attendanceData.academic_calendar.file_name
+    : attendanceData.last_weekly_upload_date
+      ? 'Academic calendar could not be loaded'
+      : 'Upload a weekly attendance PDF to enable calendar-based dates';
+  const selectedDateLectureHints =
+    attendanceData.timetable_lecture_hints?.[dailyAttendanceDate] || {};
+
   return (
     <div className="panel-card">
       <div className="section-heading">
@@ -32,14 +40,18 @@ function DailyUpdatePanel({
               <small>The daily prompts stop at the current local date.</small>
             </div>
             <div className="mini-card compact">
-              <span className="mini-label">Last weekly upload</span>
+              <span className="mini-label">Weekly coverage till</span>
               <strong>{formatDateLabel(attendanceData.last_weekly_upload_date)}</strong>
-              <small>{attendanceData.academic_calendar?.file_name || 'Academic calendar not found'}</small>
+              <small>{calendarStatusText}</small>
             </div>
           </div>
 
           {attendanceData.academic_calendar_error ? (
             <div className="error-banner">{attendanceData.academic_calendar_error}</div>
+          ) : null}
+
+          {attendanceData.timetable_error ? (
+            <div className="error-banner">{attendanceData.timetable_error}</div>
           ) : null}
 
           {pendingDates.length ? (
@@ -76,26 +88,73 @@ function DailyUpdatePanel({
                     {dailySubjects.map((subjectName) => (
                       <div className="subject-check-card" key={subjectName}>
                         <strong>{subjectName}</strong>
-                        <label className="checkbox-row">
+                        <small className="subject-lecture-hint">
+                          Timetable suggestion: {selectedDateLectureHints[subjectName] || 0} lecture(s)
+                        </small>
+
+                        <label className="inline-field compact-field">
+                          <span>Lectures held</span>
                           <input
-                            checked={Boolean(dailyEntries[subjectName]?.was_class_held)}
+                            min="0"
                             onChange={(event) =>
-                              onDailyEntryChange(subjectName, 'was_class_held', event.target.checked)
+                              onDailyEntryChange(subjectName, 'held_lectures', event.target.value)
                             }
-                            type="checkbox"
+                            type="number"
+                            value={dailyEntries[subjectName]?.held_lectures ?? 0}
                           />
-                          <span>Class was held</span>
                         </label>
-                        <label className="checkbox-row">
+
+                        <label className="inline-field compact-field">
+                          <span>Lectures attended</span>
                           <input
-                            checked={Boolean(dailyEntries[subjectName]?.was_present)}
+                            min="0"
                             onChange={(event) =>
-                              onDailyEntryChange(subjectName, 'was_present', event.target.checked)
+                              onDailyEntryChange(subjectName, 'attended_lectures', event.target.value)
                             }
-                            type="checkbox"
+                            type="number"
+                            value={dailyEntries[subjectName]?.attended_lectures ?? 0}
                           />
-                          <span>I attended</span>
                         </label>
+
+                        <div className="proxy-action-row">
+                          <button
+                            className={
+                              dailyEntries[subjectName]?.use_proxy
+                                ? 'ghost-button proxy-button-active'
+                                : 'ghost-button'
+                            }
+                            onClick={() => onDailyEntryChange(subjectName, 'toggle_proxy', true)}
+                            type="button"
+                          >
+                            {dailyEntries[subjectName]?.use_proxy ? 'Proxy enabled' : 'Add proxy'}
+                          </button>
+                          <button
+                            className="ghost-button"
+                            onClick={() => onDailyEntryChange(subjectName, 'proxy_quick_add', 1)}
+                            type="button"
+                          >
+                            Proxy +1
+                          </button>
+                        </div>
+
+                        {dailyEntries[subjectName]?.use_proxy ? (
+                          <label className="inline-field compact-field">
+                            <span>Proxy lectures</span>
+                            <input
+                              min="0"
+                              onChange={(event) =>
+                                onDailyEntryChange(subjectName, 'proxy_lectures', event.target.value)
+                              }
+                              type="number"
+                              value={dailyEntries[subjectName]?.proxy_lectures ?? 0}
+                            />
+                          </label>
+                        ) : null}
+
+                        <small className="subject-impact-note">
+                          This update adds +{dailyEntries[subjectName]?.attended_lectures ?? 0}/
+                          {dailyEntries[subjectName]?.held_lectures ?? 0} for this subject.
+                        </small>
                       </div>
                     ))}
                   </div>
@@ -112,7 +171,7 @@ function DailyUpdatePanel({
             </>
           ) : (
             <div className="empty-state">
-              No pending instructional dates between the latest weekly upload and today.
+              No pending instructional dates between the weekly coverage date and today.
             </div>
           )}
         </>

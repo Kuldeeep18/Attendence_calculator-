@@ -8,6 +8,7 @@ const { PDFParse } = require('pdf-parse');
 const { env } = require('../../config/env');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
+const SERVER_ROOT = path.resolve(__dirname, '../../..');
 const ROW_START_PATTERN = /^(Sun|Mon|Tues|Wed|Thu|Fri|Sat)\b/;
 const MONTH_SEQUENCE = [
   { label: 'March-26', year: 2026, month: 3 },
@@ -244,28 +245,87 @@ async function parseAcademicCalendarPdf(fileBuffer, fileName) {
   }
 }
 
-async function resolveAcademicCalendarPath() {
-  if (env.ACADEMIC_CALENDAR_PATH) {
-    return path.isAbsolute(env.ACADEMIC_CALENDAR_PATH)
-      ? env.ACADEMIC_CALENDAR_PATH
-      : path.resolve(PROJECT_ROOT, env.ACADEMIC_CALENDAR_PATH);
+async function fileExists(filePath) {
+  try {
+    const fileStats = await fs.stat(filePath);
+    return fileStats.isFile();
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function findCalendarPdfInDirectory(directoryPath) {
+  let directoryEntries;
+
+  try {
+    directoryEntries = await fs.readdir(directoryPath);
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+      return null;
+    }
+
+    throw error;
   }
 
-  const projectFiles = await fs.readdir(PROJECT_ROOT);
-  const matchedFileName = projectFiles.find(
+  const matchedFileName = directoryEntries.find(
     (fileName) =>
       /\.pdf$/i.test(fileName) &&
       /academic\s*calendar/i.test(fileName)
   );
 
-  if (!matchedFileName) {
+  return matchedFileName ? path.resolve(directoryPath, matchedFileName) : null;
+}
+
+async function resolveAcademicCalendarPath() {
+  if (env.ACADEMIC_CALENDAR_PATH) {
+    const configuredPath = String(env.ACADEMIC_CALENDAR_PATH).trim();
+
+    if (path.isAbsolute(configuredPath)) {
+      if (await fileExists(configuredPath)) {
+        return configuredPath;
+      }
+
+      throw createCalendarError(
+        `Academic calendar PDF not found at ACADEMIC_CALENDAR_PATH: ${configuredPath}`,
+        404
+      );
+    }
+
+    const candidatePaths = [
+      path.resolve(PROJECT_ROOT, configuredPath),
+      path.resolve(SERVER_ROOT, configuredPath)
+    ];
+
+    for (const candidatePath of candidatePaths) {
+      if (await fileExists(candidatePath)) {
+        return candidatePath;
+      }
+    }
+
     throw createCalendarError(
-      'Academic calendar PDF not found in the project folder. Add ACADEMIC_CALENDAR_PATH or place the PDF in the project root.',
+      `Academic calendar PDF not found at ACADEMIC_CALENDAR_PATH (${configuredPath}). Checked project and server locations.`,
       404
     );
   }
 
-  return path.resolve(PROJECT_ROOT, matchedFileName);
+  const fallbackDirectories = [PROJECT_ROOT, SERVER_ROOT];
+
+  for (const directoryPath of fallbackDirectories) {
+    const detectedPath = await findCalendarPdfInDirectory(directoryPath);
+
+    if (detectedPath) {
+      return detectedPath;
+    }
+  }
+
+  throw createCalendarError(
+    'Academic calendar PDF not found. Add ACADEMIC_CALENDAR_PATH in server/.env or place the PDF in the project root.',
+    404
+  );
 }
 
 async function loadAcademicCalendar() {

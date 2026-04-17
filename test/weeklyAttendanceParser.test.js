@@ -50,3 +50,37 @@ test('parses the B5-B9 weekly attendance PDF', async () => {
   assert.equal(parsed.students.at(-1).division, 'B9');
   assert.equal(parsed.students.at(-1).roll_no, 292);
 });
+
+test('parses newer compiled attendance layout when week 04 PDF exists', {
+  skip: !fs.existsSync(
+    path.resolve(__dirname, '../SY2_Weekly_Compile_ Attendance_Sem-4_2026 - B1 - B9_Week  04.pdf')
+  )
+}, async () => {
+  const filePath = path.resolve(
+    __dirname,
+    '../SY2_Weekly_Compile_ Attendance_Sem-4_2026 - B1 - B9_Week  04.pdf'
+  );
+
+  const parsed = await parseWeeklyAttendancePdf(
+    fs.readFileSync(filePath),
+    path.basename(filePath)
+  );
+
+  const sandip = parsed.students.find(
+    (student) => student.enrollment_no === '24002171210167'
+  );
+
+  assert.ok(sandip);
+  assert.equal(sandip.division, 'B3');
+  assert.equal(sandip.total_attended, 59);
+  assert.equal(sandip.total_conducted, 73);
+  assert.equal(sandip.overall_percentage, 80.82);
+
+  const dmSubject = sandip.subjects.find((subject) => subject.subject_name === 'DM');
+  assert.ok(dmSubject);
+  assert.equal(dmSubject.attended, 9);
+  assert.equal(dmSubject.total, 14);
+  assert.equal(dmSubject.attendance_percentage, 64.29);
+
+  assert.equal(parsed.week_label, 'Week 4');
+});

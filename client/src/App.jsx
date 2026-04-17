@@ -41,6 +41,8 @@ function createEmptyAttendanceState() {
     last_weekly_upload_date: null,
     academic_calendar: null,
     academic_calendar_error: null,
+    timetable_lecture_hints: {},
+    timetable_error: null,
     pending_attendance_dates: []
   };
 }
@@ -58,11 +60,26 @@ function formatDateLabel(dateString) {
   return `${weekday}, ${monthLabel} ${day}, ${year}`;
 }
 
-function createBlankDailyEntries(subjectNames = []) {
+function normalizeNonNegativeInteger(value) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+    return 0;
+  }
+
+  return Math.floor(parsedValue);
+}
+
+function createBlankDailyEntries(subjectNames = [], suggestedLectureCounts = {}) {
   return Object.fromEntries(
     subjectNames.map((subjectName) => [
       subjectName,
-      { was_class_held: false, was_present: false }
+      {
+        held_lectures: normalizeNonNegativeInteger(suggestedLectureCounts[subjectName]),
+        attended_lectures: 0,
+        proxy_lectures: 0,
+        use_proxy: false
+      }
     ])
   );
 }
@@ -177,8 +194,14 @@ function App() {
 
   useEffect(() => {
     const subjectNames = attendanceData.available_subjects || [];
-    setDailyEntries(createBlankDailyEntries(subjectNames));
-  }, [attendanceData.available_subjects, dailyAttendanceDate]);
+    const suggestedLectureCounts =
+      attendanceData.timetable_lecture_hints?.[dailyAttendanceDate] || {};
+    setDailyEntries(createBlankDailyEntries(subjectNames, suggestedLectureCounts));
+  }, [
+    attendanceData.available_subjects,
+    attendanceData.timetable_lecture_hints,
+    dailyAttendanceDate
+  ]);
 
   useEffect(() => {
     const pendingDates = attendanceData.pending_attendance_dates || [];
@@ -375,19 +398,55 @@ function App() {
   }
 
   function handleDailyEntryChange(subjectName, field, value) {
-    setDailyEntries((previous) => ({
-      ...previous,
-      [subjectName]: {
-        was_class_held:
-          field === 'was_class_held'
-            ? value
-            : value
-              ? true
-              : previous[subjectName]?.was_class_held || false,
-        was_present:
-          field === 'was_present' ? value : value ? previous[subjectName]?.was_present || false : false
+    setDailyEntries((previous) => {
+      const current = previous[subjectName] || {
+        held_lectures: 0,
+        attended_lectures: 0,
+        proxy_lectures: 0,
+        use_proxy: false
+      };
+      const next = {
+        ...current
+      };
+
+      if (field === 'toggle_proxy') {
+        next.use_proxy = !current.use_proxy;
+
+        if (!next.use_proxy) {
+          next.proxy_lectures = 0;
+        }
+      } else if (field === 'proxy_quick_add') {
+        next.use_proxy = true;
+        next.proxy_lectures = normalizeNonNegativeInteger(current.proxy_lectures + 1);
+      } else {
+        next[field] = normalizeNonNegativeInteger(value);
+
+        if (field === 'proxy_lectures' && next.proxy_lectures > 0) {
+          next.use_proxy = true;
+        }
       }
-    }));
+
+      next.held_lectures = normalizeNonNegativeInteger(next.held_lectures);
+      next.attended_lectures = normalizeNonNegativeInteger(next.attended_lectures);
+      next.proxy_lectures = normalizeNonNegativeInteger(next.proxy_lectures);
+
+      if (next.attended_lectures > next.held_lectures) {
+        next.attended_lectures = next.held_lectures;
+      }
+
+      if (next.proxy_lectures > next.attended_lectures) {
+        next.proxy_lectures = next.attended_lectures;
+      }
+
+      if (!next.use_proxy) {
+        next.proxy_lectures = 0;
+      }
+
+      return {
+        ...previous,
+        [subjectName]: next
+      };
+    });
   }
 
   async function handleDailySubmit(event) {
@@ -403,8 +462,18 @@ function App() {
 
     if (!pendingDates.some((pendingDate) => pendingDate.date === dailyAttendanceDate)) {
       setErrorMessage(
-        'Select one of the pending regular teaching dates generated after the latest weekly upload.'
+        'Select one of the pending regular teaching dates generated after the latest weekly coverage date.'
       );
+      return;
+    }
+
+    const invalidDailyEntry = Object.entries(dailyEntries).find(([, entry]) =>
+      entry.attended_lectures > entry.held_lectures ||
+      entry.proxy_lectures > entry.attended_lectures
+    );
+
+    if (invalidDailyEntry) {
+      setErrorMessage('Each subject must satisfy: attended lectures <= held lectures, and proxy lectures <= attended lectures.');
       return;
     }
 
@@ -418,8 +487,9 @@ function App() {
             attendanceDate: dailyAttendanceDate,
             entries: Object.entries(dailyEntries).map(([subject_name, entry]) => ({
               subject_name,
-              was_class_held: entry.was_class_held,
-              was_present: entry.was_present
+              held_lectures: entry.held_lectures,
+              attended_lectures: entry.attended_lectures,
+              proxy_lectures: entry.proxy_lectures
             }))
           },
           viewer

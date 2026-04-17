@@ -32,6 +32,35 @@ function isUsingSupabaseRest() {
   return hasSupabaseCredentials() && !isPostgresConfigured();
 }
 
+async function ensureDailyLectureLogsTable(db) {
+  await db.query(
+    `
+      create table if not exists attendance_daily_lecture_logs (
+        id uuid primary key default gen_random_uuid(),
+        student_id uuid not null references attendance_students(id) on delete cascade,
+        subject_name text not null,
+        attendance_date date not null,
+        held_lectures integer not null default 0 check (held_lectures >= 0),
+        attended_lectures integer not null default 0 check (attended_lectures >= 0),
+        proxy_lectures integer not null default 0 check (proxy_lectures >= 0),
+        created_by_profile_id uuid references attendance_profiles(id) on delete set null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (student_id, subject_name, attendance_date),
+        check (attended_lectures <= held_lectures),
+        check (proxy_lectures <= attended_lectures)
+      )
+    `
+  );
+
+  await db.query(
+    `
+      create index if not exists idx_attendance_daily_lecture_logs_student_id
+        on attendance_daily_lecture_logs (student_id)
+    `
+  );
+}
+
 function mapSubjectRows(subjects) {
   return subjects.map((subject) => ({
     subject_name: subject.subject_name,
@@ -41,7 +70,29 @@ function mapSubjectRows(subjects) {
   }));
 }
 
-function calculateAttendancePercentage(subjects) {
+function calculateAttendancePercentage(subjects, aggregateAttendance = null) {
+  const overallPercentage =
+    aggregateAttendance?.overall_percentage == null
+      ? null
+      : Number(aggregateAttendance.overall_percentage);
+
+  if (Number.isFinite(overallPercentage)) {
+    return `${overallPercentage.toFixed(2)}%`;
+  }
+
+  const totalAttended =
+    aggregateAttendance?.total_attended == null
+      ? null
+      : Number(aggregateAttendance.total_attended);
+  const totalConducted =
+    aggregateAttendance?.total_conducted == null
+      ? null
+      : Number(aggregateAttendance.total_conducted);
+
+  if (Number.isFinite(totalAttended) && Number.isFinite(totalConducted) && totalConducted > 0) {
+    return `${((totalAttended / totalConducted) * 100).toFixed(2)}%`;
+  }
+
   const totals = subjects.reduce(
     (summary, subject) => {
       summary.attended += subject.attended;
@@ -165,7 +216,10 @@ async function getProfilesByIds(profileIds) {
     return data.map((profile) => ({
       ...profile,
       enrollment_no: null,
-      division: null
+      division: null,
+      total_attended: null,
+      total_conducted: null,
+      overall_percentage: null
     }));
   }
 
@@ -179,7 +233,10 @@ async function getProfilesByIds(profileIds) {
           p.email,
           p.student_id,
           s.enrollment_no,
-          s.division
+          s.division,
+          s.total_attended,
+          s.total_conducted,
+          s.overall_percentage
         from attendance_profiles p
         left join attendance_students s
           on s.id = p.student_id
@@ -334,7 +391,7 @@ async function getFriendSummaries(ownerProfileId) {
       id: profile.id,
       name: profile.name,
       email: profile.email,
-      attendance: calculateAttendancePercentage(profileSubjects),
+      attendance: calculateAttendancePercentage(profileSubjects, profile),
       subject_count: profileSubjects.length,
       linked_to_import: Boolean(profile.student_id),
       enrollment_no: profile.enrollment_no || null,
@@ -347,6 +404,7 @@ async function getCurrentAttendanceSnapshot(profileId) {
   assertPostgresConfigured();
 
   const pool = getPostgresPool();
+  await ensureDailyLectureLogsTable(pool);
   const profileResult = await pool.query(
     `
       select
@@ -361,6 +419,9 @@ async function getCurrentAttendanceSnapshot(profileId) {
         s.division,
         s.mentor_name,
         s.latest_import_id,
+        s.total_attended,
+        s.total_conducted,
+        s.overall_percentage,
         i.file_name as latest_import_file_name,
         i.week_label as latest_import_week_label,
         i.report_date::text as latest_import_report_date,
@@ -409,10 +470,24 @@ async function getCurrentAttendanceSnapshot(profileId) {
     ? (
         await pool.query(
           `
-            select subject_name, attendance_date::text as attendance_date, was_class_held, was_present, updated_at
-            from attendance_daily_logs
-            where student_id = $1
-            order by attendance_date desc, subject_name asc
+            select
+              logs.subject_name,
+              logs.attendance_date::text as attendance_date,
+              logs.was_class_held,
+              logs.was_present,
+              coalesce(lecture_logs.held_lectures, case when logs.was_class_held then 1 else 0 end)
+                as held_lectures,
+              coalesce(lecture_logs.attended_lectures, case when logs.was_present then 1 else 0 end)
+                as attended_lectures,
+              coalesce(lecture_logs.proxy_lectures, 0) as proxy_lectures,
+              logs.updated_at
+            from attendance_daily_logs logs
+            left join attendance_daily_lecture_logs lecture_logs
+              on lecture_logs.student_id = logs.student_id
+             and lecture_logs.subject_name = logs.subject_name
+             and lecture_logs.attendance_date = logs.attendance_date
+            where logs.student_id = $1
+            order by logs.attendance_date desc, logs.subject_name asc
             limit 20
           `,
           [profile.student_id]
@@ -450,6 +525,12 @@ async function getCurrentAttendanceSnapshot(profileId) {
           roll_no: profile.roll_no,
           division: profile.division,
           mentor_name: profile.mentor_name,
+          total_attended: profile.total_attended,
+          total_conducted: profile.total_conducted,
+          overall_percentage:
+            profile.overall_percentage == null
+              ? null
+              : Number(profile.overall_percentage),
           latest_import: profile.latest_import_id
             ? {
                 id: profile.latest_import_id,
@@ -541,6 +622,7 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
 
   try {
     await client.query('begin');
+    await ensureDailyLectureLogsTable(client);
 
     const importResult = await client.query(
       `
@@ -573,7 +655,10 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
       roll_no: student.roll_no,
       division: student.division,
       name: student.name,
-      mentor_name: student.mentor_name
+      mentor_name: student.mentor_name,
+      total_attended: student.total_attended,
+      total_conducted: student.total_conducted,
+      overall_percentage: student.overall_percentage
     }));
 
     const upsertedStudentsResult = await client.query(
@@ -585,7 +670,10 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
             roll_no integer,
             division text,
             name text,
-            mentor_name text
+            mentor_name text,
+            total_attended integer,
+            total_conducted integer,
+            overall_percentage numeric
           )
         )
         insert into attendance_students (
@@ -594,6 +682,9 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
           division,
           name,
           mentor_name,
+          total_attended,
+          total_conducted,
+          overall_percentage,
           latest_import_id,
           updated_at
         )
@@ -603,6 +694,9 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
           incoming.division,
           incoming.name,
           incoming.mentor_name,
+          incoming.total_attended,
+          incoming.total_conducted,
+          incoming.overall_percentage,
           $2,
           now()
         from incoming
@@ -612,6 +706,9 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
           division = excluded.division,
           name = excluded.name,
           mentor_name = excluded.mentor_name,
+          total_attended = excluded.total_attended,
+          total_conducted = excluded.total_conducted,
+          overall_percentage = excluded.overall_percentage,
           latest_import_id = excluded.latest_import_id,
           updated_at = now()
         returning id, enrollment_no
@@ -666,19 +763,39 @@ async function saveWeeklyImport(importedByProfileId, parsedImport) {
       [JSON.stringify(subjectPayload)]
     );
 
-    if (parsedImport.report_date) {
+    const latestCoveredDate =
+      parsedImport.end_date || parsedImport.report_date || parsedImport.start_date || null;
+
+    if (latestCoveredDate) {
       await client.query(
         `
           delete from attendance_daily_logs
           where student_id = any($1::uuid[])
             and attendance_date <= $2
         `,
-        [studentIds, parsedImport.report_date]
+        [studentIds, latestCoveredDate]
+      );
+
+      await client.query(
+        `
+          delete from attendance_daily_lecture_logs
+          where student_id = any($1::uuid[])
+            and attendance_date <= $2
+        `,
+        [studentIds, latestCoveredDate]
       );
     } else {
       await client.query(
         `
           delete from attendance_daily_logs
+          where student_id = any($1::uuid[])
+        `,
+        [studentIds]
+      );
+
+      await client.query(
+        `
+          delete from attendance_daily_lecture_logs
           where student_id = any($1::uuid[])
         `,
         [studentIds]
@@ -766,6 +883,7 @@ async function applyDailyAttendance(profileId, attendanceDate, entries) {
 
   try {
     await client.query('begin');
+    await ensureDailyLectureLogsTable(client);
 
     const profileResult = await client.query(
       `
@@ -790,10 +908,21 @@ async function applyDailyAttendance(profileId, attendanceDate, entries) {
     }
 
     const subjectNames = entries.map((entry) => entry.subject_name);
-    const existingLogResult = await client.query(
+    const existingLegacyLogResult = await client.query(
       `
         select subject_name, was_class_held, was_present
         from attendance_daily_logs
+        where student_id = $1
+          and attendance_date = $2
+          and subject_name = any($3::text[])
+      `,
+      [profile.student_id, attendanceDate, subjectNames]
+    );
+
+    const existingLectureLogResult = await client.query(
+      `
+        select subject_name, held_lectures, attended_lectures, proxy_lectures
+        from attendance_daily_lecture_logs
         where student_id = $1
           and attendance_date = $2
           and subject_name = any($3::text[])
@@ -811,27 +940,39 @@ async function applyDailyAttendance(profileId, attendanceDate, entries) {
       [profile.student_id, subjectNames]
     );
 
-    const logBySubject = new Map(
-      existingLogResult.rows.map((row) => [row.subject_name, row])
+    const legacyLogBySubject = new Map(
+      existingLegacyLogResult.rows.map((row) => [row.subject_name, row])
+    );
+    const lectureLogBySubject = new Map(
+      existingLectureLogResult.rows.map((row) => [row.subject_name, row])
     );
     const subjectByName = new Map(
       existingSubjectResult.rows.map((row) => [row.subject_name, row])
     );
 
     for (const entry of entries) {
-      const previous = logBySubject.get(entry.subject_name) || {
-        was_class_held: false,
-        was_present: false
-      };
+      const previousLectureLog = lectureLogBySubject.get(entry.subject_name);
+      const previousLegacyLog = legacyLogBySubject.get(entry.subject_name);
+      const previous = previousLectureLog
+        ? {
+            held_lectures: Number(previousLectureLog.held_lectures || 0),
+            attended_lectures: Number(previousLectureLog.attended_lectures || 0),
+            proxy_lectures: Number(previousLectureLog.proxy_lectures || 0)
+          }
+        : {
+            held_lectures: Number(previousLegacyLog?.was_class_held || false),
+            attended_lectures: Number(previousLegacyLog?.was_present || false),
+            proxy_lectures: 0
+          };
       const currentSubject = subjectByName.get(entry.subject_name) || {
         attended: 0,
         total: 0
       };
 
       const totalDelta =
-        Number(entry.was_class_held) - Number(previous.was_class_held);
+        Number(entry.held_lectures) - Number(previous.held_lectures);
       const attendedDelta =
-        Number(entry.was_present) - Number(previous.was_present);
+        Number(entry.attended_lectures) - Number(previous.attended_lectures);
 
       const nextTotal = currentSubject.total + totalDelta;
       const nextAttended = currentSubject.attended + attendedDelta;
@@ -885,8 +1026,40 @@ async function applyDailyAttendance(profileId, attendanceDate, entries) {
           profile.student_id,
           entry.subject_name,
           attendanceDate,
-          entry.was_class_held,
-          entry.was_present,
+          entry.held_lectures > 0,
+          entry.attended_lectures > 0,
+          profileId
+        ]
+      );
+
+      await client.query(
+        `
+          insert into attendance_daily_lecture_logs (
+            student_id,
+            subject_name,
+            attendance_date,
+            held_lectures,
+            attended_lectures,
+            proxy_lectures,
+            created_by_profile_id,
+            updated_at
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, now())
+          on conflict (student_id, subject_name, attendance_date)
+          do update set
+            held_lectures = excluded.held_lectures,
+            attended_lectures = excluded.attended_lectures,
+            proxy_lectures = excluded.proxy_lectures,
+            created_by_profile_id = excluded.created_by_profile_id,
+            updated_at = now()
+        `,
+        [
+          profile.student_id,
+          entry.subject_name,
+          attendanceDate,
+          entry.held_lectures,
+          entry.attended_lectures,
+          entry.proxy_lectures,
           profileId
         ]
       );

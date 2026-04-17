@@ -43,10 +43,68 @@ create table if not exists attendance_students (
   division text,
   name text not null,
   mentor_name text,
+  total_attended integer,
+  total_conducted integer,
+  overall_percentage numeric(5,2),
   latest_import_id uuid references attendance_imports(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table attendance_students
+  add column if not exists total_attended integer,
+  add column if not exists total_conducted integer,
+  add column if not exists overall_percentage numeric(5,2);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'attendance_students_total_attended_check'
+  ) then
+    alter table attendance_students
+      add constraint attendance_students_total_attended_check
+      check (total_attended is null or total_attended >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'attendance_students_total_conducted_check'
+  ) then
+    alter table attendance_students
+      add constraint attendance_students_total_conducted_check
+      check (total_conducted is null or total_conducted >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'attendance_students_overall_percentage_check'
+  ) then
+    alter table attendance_students
+      add constraint attendance_students_overall_percentage_check
+      check (
+        overall_percentage is null
+        or (overall_percentage >= 0 and overall_percentage <= 100)
+      );
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'attendance_students_totals_consistency_check'
+  ) then
+    alter table attendance_students
+      add constraint attendance_students_totals_consistency_check
+      check (
+        total_attended is null
+        or total_conducted is null
+        or total_attended <= total_conducted
+      );
+  end if;
+end $$;
 
 do $$
 begin
@@ -99,6 +157,22 @@ create table if not exists attendance_daily_logs (
   check (not was_present or was_class_held)
 );
 
+create table if not exists attendance_daily_lecture_logs (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references attendance_students(id) on delete cascade,
+  subject_name text not null,
+  attendance_date date not null,
+  held_lectures integer not null check (held_lectures >= 0),
+  attended_lectures integer not null check (attended_lectures >= 0),
+  proxy_lectures integer not null default 0 check (proxy_lectures >= 0),
+  created_by_profile_id uuid references attendance_profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (student_id, subject_name, attendance_date),
+  check (attended_lectures <= held_lectures),
+  check (proxy_lectures <= attended_lectures)
+);
+
 create table if not exists friendships (
   owner_profile_id uuid not null references attendance_profiles(id) on delete cascade,
   friend_profile_id uuid not null references attendance_profiles(id) on delete cascade,
@@ -121,6 +195,9 @@ create index if not exists idx_attendance_student_subjects_student_id
 
 create index if not exists idx_attendance_daily_logs_student_id
   on attendance_daily_logs (student_id);
+
+create index if not exists idx_attendance_daily_lecture_logs_student_id
+  on attendance_daily_lecture_logs (student_id);
 
 create index if not exists idx_friendships_owner_profile_id
   on friendships (owner_profile_id);
